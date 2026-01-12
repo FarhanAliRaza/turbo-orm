@@ -54,10 +54,10 @@ async def django_async_read():
 @api.get("/async")
 async def turbo_async_read():
     """Read using turbo-orm's true async (no thread pool overhead)."""
-    articles = await Article.aobjects.all()[:100].alist()
-    count = await Article.aobjects.acount()
+    articles = await Article.objects.all()[:100].alist()
+    count = await Article.objects.acount()
     for article in articles[:10]:
-        _ = await Article.aobjects.aget(id=article.id)
+        _ = await Article.objects.aget(id=article.id)
     return {
         "type": "turbo_orm_async",
         "count": count,

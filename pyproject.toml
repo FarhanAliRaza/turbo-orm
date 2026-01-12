@@ -1,7 +1,7 @@
 [project]
-name = "turbo-orm"
+name = "django-turbo-orm"
 version = "0.5.0"
-description = "Turbo ORM - True async ORM for Django with genuine async database operations"
+description = "Async database operations for Django using psycopg3 async cursors and connection pooling (uses django-async-backend)"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}

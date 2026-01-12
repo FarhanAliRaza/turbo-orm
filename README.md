@@ -1,13 +1,13 @@
-# turbo-orm
+# django-turbo-orm
 
-True async ORM for Django - genuine async database operations without thread pool overhead.
+Async database operations for Django using psycopg3 async cursors and connection pooling (uses django-async-backend).
 
 ## Features
 
-- **True Async** - No `sync_to_async` wrappers, real async database I/O
-- **Django Compatible** - Uses Django's Query object for SQL generation
-- **Familiar API** - Same chainable queryset interface you know
-- **High Performance** - 2-4x throughput improvement under concurrent load
+- Async database I/O using psycopg3 async cursors
+- Connection pooling via psycopg_pool
+- Django's Query object for SQL generation
+- Familiar chainable queryset API
 
 ## Requirements
 
