@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>turbo-orm Benchmark Results</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+        .config {
+            text-align: center;
+            background: #1e293b;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            font-family: monospace;
+            color: #94a3b8;
+        }
+        .charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        .chart-container {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .chart-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: #f1f5f9;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .stat-card.winner {
+            background: linear-gradient(135deg, #1e3a5f, #1e293b);
+            border: 1px solid #3b82f6;
+        }
+        .stat-label {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        .stat-unit {
+            font-size: 1rem;
+            color: #64748b;
+        }
+        .stat-sub {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-top: 0.5rem;
+        }
+        .sync { color: #f97316; }
+        .django { color: #eab308; }
+        .async { color: #22c55e; }
+        .improvement {
+            display: inline-block;
+            background: #166534;
+            color: #4ade80;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 1rem;
+            text-align: left;
+        }
+        th {
+            background: #334155;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        tr:not(:last-child) td {
+            border-bottom: 1px solid #334155;
+        }
+        .best {
+            background: #166534;
+            color: #4ade80;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>turbo-orm Benchmark</h1>
+        <p class="subtitle">Comparing Django Sync, Django Async, and turbo-orm</p>
+
+        <div class="config">
+            bombardier -c 100 -n 10000 &nbsp;|&nbsp; 100 concurrent connections &nbsp;|&nbsp; 10,000 requests &nbsp;|&nbsp; 8 queries per request
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Django Sync</div>
+                <div class="stat-value sync">340</div>
+                <div class="stat-unit">req/sec</div>
+                <div class="stat-sub">Latency: 293ms</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Django Async</div>
+                <div class="stat-value django">211</div>
+                <div class="stat-unit">req/sec</div>
+                <div class="stat-sub">Latency: 473ms</div>
+            </div>
+            <div class="stat-card winner">
+                <div class="stat-label">turbo-orm</div>
+                <div class="stat-value async">384</div>
+                <div class="stat-unit">req/sec</div>
+                <div class="stat-sub">Latency: 266ms</div>
+                <div class="improvement">+82% vs Django Async</div>
+            </div>
+        </div>
+
+        <div class="charts">
+            <div class="chart-container">
+                <div class="chart-title">Requests per Second (higher is better)</div>
+                <canvas id="rpsChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Average Latency (lower is better)</div>
+                <canvas id="latencyChart"></canvas>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Django Sync</th>
+                    <th>Django Async</th>
+                    <th>turbo-orm</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Requests/sec</td>
+                    <td class="sync">340.18</td>
+                    <td class="django">210.83</td>
+                    <td class="async">383.70 <span class="best">BEST</span></td>
+                </tr>
+                <tr>
+                    <td>Avg Latency</td>
+                    <td class="sync">293.14ms</td>
+                    <td class="django">472.52ms</td>
+                    <td class="async">266.34ms <span class="best">BEST</span></td>
+                </tr>
+                <tr>
+                    <td>Max Latency</td>
+                    <td class="sync">376.40ms</td>
+                    <td class="django">619.58ms</td>
+                    <td class="async">455.45ms</td>
+                </tr>
+                <tr>
+                    <td>Stdev</td>
+                    <td class="sync">17.28ms</td>
+                    <td class="django">35.83ms</td>
+                    <td class="async">29.85ms</td>
+                </tr>
+                <tr>
+                    <td>Throughput</td>
+                    <td class="sync">117.45 KB/s</td>
+                    <td class="django">73.26 KB/s</td>
+                    <td class="async">129.92 KB/s <span class="best">BEST</span></td>
+                </tr>
+                <tr>
+                    <td>Total Time</td>
+                    <td class="sync">29s</td>
+                    <td class="django">47s</td>
+                    <td class="async">26s <span class="best">BEST</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const colors = {
+            sync: '#f97316',
+            django: '#eab308',
+            async: '#22c55e'
+        };
+
+        // RPS Chart
+        new Chart(document.getElementById('rpsChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Django Sync', 'Django Async', 'turbo-orm'],
+                datasets: [{
+                    data: [340.18, 210.83, 383.70],
+                    backgroundColor: [colors.sync, colors.django, colors.async],
+                    borderRadius: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+
+        // Latency Chart
+        new Chart(document.getElementById('latencyChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Django Sync', 'Django Async', 'turbo-orm'],
+                datasets: [{
+                    data: [293.14, 472.52, 266.34],
+                    backgroundColor: [colors.sync, colors.django, colors.async],
+                    borderRadius: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#334155' },
+                        ticks: {
+                            color: '#94a3b8',
+                            callback: (v) => v + 'ms'
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

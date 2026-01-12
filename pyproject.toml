@@ -1,6 +1,6 @@
 [project]
 name = "django-turbo-orm"
-version = "0.1.1"
+version = "0.2.0"
 description = "Async database operations for Django using psycopg3 async cursors and connection pooling (uses django-async-backend)"
 readme = "README.md"
 requires-python = ">=3.12"
