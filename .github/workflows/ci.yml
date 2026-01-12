@@ -69,6 +69,15 @@ jobs:
           uv sync --all-groups
           uv pip install "${{ matrix.django-version }}"
 
+      - name: Run migrations
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: turbo_orm_test
+        run: uv run python -m django migrate --settings=tests.settings
+
       - name: Run tests
         env:
           POSTGRES_HOST: localhost
