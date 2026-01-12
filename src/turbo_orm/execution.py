@@ -18,19 +18,35 @@ if TYPE_CHECKING:
 @asynccontextmanager
 async def _get_cursor(using: str = "default"):
     """
-    Get an async cursor and ensure connection is returned to pool after use.
+    Get an async cursor with proper connection pooling.
 
-    django-async-backend requires calling close() after cursor usage to return
-    the connection to the pool (see django-async-backend/test_example/app.py).
+    Bypasses thread-local wrapper to get direct pool connection per request.
     """
     from django_async_backend.db import async_connections
 
+    # Get the async connection wrapper (to access its pool)
     async_conn = async_connections[using]
-    try:
+
+    # Get connection directly from pool
+    pool = async_conn.pool
+    if pool is None:
+        # No pooling - use regular cursor
         async with async_conn.cursor() as cursor:
             yield cursor
+        return
+
+    # Open pool if not already open
+    if pool.closed:
+        await pool.open()
+
+    # Get connection from pool directly
+    conn = await pool.getconn()
+    try:
+        cursor = conn.cursor()
+        yield cursor
     finally:
-        await async_conn.close()  # Returns connection to pool
+        # Return connection to pool
+        await pool.putconn(conn)
 
 
 async def execute_query(query: Query, using: str = "default") -> list[tuple]:
