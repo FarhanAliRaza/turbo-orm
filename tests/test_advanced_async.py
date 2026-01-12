@@ -97,9 +97,7 @@ class TestAsyncModelMixin:
         """Test arefresh_from_db() with specific fields."""
         article = await article_factory(title="Title", view_count=10)
 
-        await Article.objects.filter(pk=article.pk).aupdate(
-            title="New Title", view_count=999
-        )
+        await Article.objects.filter(pk=article.pk).aupdate(title="New Title", view_count=999)
 
         # Only refresh title
         await article.arefresh_from_db(fields=["title"])
@@ -185,9 +183,7 @@ class TestPrefetchRelated:
     """Test prefetch_related functionality for reverse FK and M2M."""
 
     @pytest.mark.asyncio
-    async def test_prefetch_related_reverse_fk(
-        self, article_factory, comment_factory
-    ):
+    async def test_prefetch_related_reverse_fk(self, article_factory, comment_factory):
         """Test prefetch_related() for reverse ForeignKey."""
         article = await article_factory(title="Article with Comments")
         await comment_factory(article=article, text="Comment 1")
@@ -353,9 +349,7 @@ class TestAggregate:
         await article_factory(title="Published", view_count=100, is_published=True)
         await article_factory(title="Draft", view_count=50, is_published=False)
 
-        result = await Article.objects.filter(is_published=True).aaggregate(
-            total=Sum("view_count")
-        )
+        result = await Article.objects.filter(is_published=True).aaggregate(total=Sum("view_count"))
 
         assert result == {"total": 100}
 
@@ -376,9 +370,7 @@ class TestAdditionalTerminalMethods:
     """Test additional async terminal methods."""
 
     @pytest.mark.asyncio
-    async def test_async_iteration_with_select_related(
-        self, author_factory, article_factory
-    ):
+    async def test_async_iteration_with_select_related(self, author_factory, article_factory):
         """Test async iteration with select_related."""
         author = await author_factory(name="Iterator Author")
         await article_factory(title="Iter Article 1", author_obj=author)
@@ -414,9 +406,7 @@ class TestAdditionalTerminalMethods:
         await article_factory(title="Article 2", author_obj=author2)
         await article_factory(title="Article 3", author_obj=None)
 
-        articles = await (
-            Article.objects.select_related("author").order_by("title").alist()
-        )
+        articles = await Article.objects.select_related("author").order_by("title").alist()
 
         assert len(articles) == 3
         assert articles[0].author.name == "Author 1"

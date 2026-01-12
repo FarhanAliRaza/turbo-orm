@@ -50,9 +50,7 @@ class AsyncModelMixin:
             await execute_insert(self, using)
         else:
             if update_fields is None:
-                update_fields = [
-                    f.name for f in self._meta.concrete_fields if not f.primary_key
-                ]
+                update_fields = [f.name for f in self._meta.concrete_fields if not f.primary_key]
             if update_fields:
                 await execute_instance_save(self, update_fields, using)
 
@@ -101,7 +99,8 @@ class AsyncModelMixin:
         if fields:
             # Defer all fields except the ones we want to refresh
             defer_fields = [
-                f.name for f in self._meta.concrete_fields
+                f.name
+                for f in self._meta.concrete_fields
                 if f.name not in fields and not f.primary_key
             ]
             if defer_fields:

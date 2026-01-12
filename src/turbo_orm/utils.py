@@ -76,12 +76,12 @@ def _rows_to_instances_with_related(
 
     # Force the compiler to set up select and klass_info
     # This is normally done during as_sql() but we need it for row mapping
-    if not hasattr(compiler, 'klass_info') or compiler.klass_info is None:
+    if not hasattr(compiler, "klass_info") or compiler.klass_info is None:
         compiler.pre_sql_setup()
-        if hasattr(compiler, 'setup_query'):
+        if hasattr(compiler, "setup_query"):
             compiler.setup_query()
 
-    klass_info = getattr(compiler, 'klass_info', None)
+    klass_info = getattr(compiler, "klass_info", None)
 
     # If still no klass_info, fall back to simple instance creation
     if klass_info is None:

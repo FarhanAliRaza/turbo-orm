@@ -34,9 +34,21 @@ async def _get_or_create_default_pool(async_conn, using: str):
     conn_params = async_conn.get_connection_params()
     # Only include standard libpq connection parameters
     allowed_params = {
-        "host", "hostaddr", "port", "dbname", "user", "password",
-        "connect_timeout", "client_encoding", "options", "application_name",
-        "sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl",
+        "host",
+        "hostaddr",
+        "port",
+        "dbname",
+        "user",
+        "password",
+        "connect_timeout",
+        "client_encoding",
+        "options",
+        "application_name",
+        "sslmode",
+        "sslcert",
+        "sslkey",
+        "sslrootcert",
+        "sslcrl",
     }
     filtered_params = {k: v for k, v in conn_params.items() if k in allowed_params and v}
     conninfo = " ".join(f"{k}={v}" for k, v in filtered_params.items())

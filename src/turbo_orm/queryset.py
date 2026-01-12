@@ -684,9 +684,7 @@ class AsyncQuerySet(Generic[T]):
         if custom_queryset is not None:
             qs = custom_queryset.filter(pk__in=list(all_related_pks))
         else:
-            qs = AsyncQuerySet(related_model, using=self._db).filter(
-                pk__in=list(all_related_pks)
-            )
+            qs = AsyncQuerySet(related_model, using=self._db).filter(pk__in=list(all_related_pks))
 
         rows = await execute_query(qs.query, qs._db)
         related_objects = rows_to_instances(related_model, rows, qs.query, qs._db)
@@ -734,9 +732,7 @@ class AsyncQuerySet(Generic[T]):
         related_objects = rows_to_instances(related_model, rows, qs.query, qs._db)
 
         # Build lookup dict by parent pk
-        related_dict = {
-            getattr(obj, f"{related_field_name}_id"): obj for obj in related_objects
-        }
+        related_dict = {getattr(obj, f"{related_field_name}_id"): obj for obj in related_objects}
 
         # Assign to instances
         for instance in instances:
