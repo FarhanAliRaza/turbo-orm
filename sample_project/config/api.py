@@ -40,12 +40,12 @@ def sync_read():
 @api.get("/django")
 async def django_async_read():
     """Read using Django's async ORM (sync_to_async under the hood)."""
-    articles = [a async for a in Article.objects.all()[:100]]
+    articles = Article.objects.all()[:10]
     count = await Article.objects.acount()
-    for article in articles[:10]:
+    async for article in articles:
         _ = await Article.objects.aget(id=article.id)
     return {
-        "type": "django_fake_async",
+        "type": "turbo_orm_async",
         "count": count,
         "articles": [serialize_article(a) for a in articles],
     }
@@ -54,10 +54,10 @@ async def django_async_read():
 @api.get("/async")
 async def turbo_async_read():
     """Read using turbo-orm's true async (no thread pool overhead)."""
-    articles = await Article.objects.all()[:100].alist()
-    count = await Article.objects.acount()
-    for article in articles[:10]:
-        _ = await Article.objects.aget(id=article.id)
+    articles = Article.aobjects.all()[:10]
+    count = await Article.aobjects.acount()
+    async for article in articles:
+        _ = await Article.aobjects.aget(id=article.id)
     return {
         "type": "turbo_orm_async",
         "count": count,

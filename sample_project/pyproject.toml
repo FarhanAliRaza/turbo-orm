@@ -8,12 +8,12 @@ dependencies = [
     "django>=5.0",
     "psycopg[binary]>=3.0",
     "django-async-backend",
-    "turbo-orm",
+    "django-turbo-orm",
     "django-bolt>=0.5.1",
 ]
 
 [tool.uv.sources]
-turbo-orm = { path = "..", editable = true }
+django-turbo-orm = { path = "..", editable = true }
 
 [tool.uv]
 package = false

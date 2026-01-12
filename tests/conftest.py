@@ -45,6 +45,17 @@ def pytest_configure():
 
 
 @pytest.fixture
+def author_factory():
+    """Factory for creating Author instances - returns an async function."""
+    from tests.models import Author
+
+    async def create_author(name="Test Author", email="test@example.com"):
+        return await Author.objects.acreate(name=name, email=email)
+
+    return create_author
+
+
+@pytest.fixture
 def article_factory():
     """Factory for creating Article instances - returns an async function."""
     from tests.models import Article
@@ -53,7 +64,8 @@ def article_factory():
         return await Article.objects.acreate(
             title=title,
             content=content,
-            author=kwargs.get("author", ""),
+            author_name=kwargs.get("author", ""),
+            author=kwargs.get("author_obj"),
             is_published=kwargs.get("is_published", False),
             view_count=kwargs.get("view_count", 0),
         )
@@ -72,12 +84,26 @@ def category_factory():
     return create_category
 
 
+@pytest.fixture
+def comment_factory():
+    """Factory for creating Comment instances - returns an async function."""
+    from tests.models import Comment
+
+    async def create_comment(article, text="Test comment"):
+        return await Comment.objects.acreate(article=article, text=text)
+
+    return create_comment
+
+
 @pytest.fixture(autouse=True)
 async def clean_tables():
     """Clean tables before each test."""
     from django_async_backend.db import async_connections
 
     async with async_connections["default"].cursor() as cursor:
+        await cursor.execute("TRUNCATE tests_comment RESTART IDENTITY CASCADE")
+        await cursor.execute("TRUNCATE tests_article_categories RESTART IDENTITY CASCADE")
         await cursor.execute("TRUNCATE tests_article RESTART IDENTITY CASCADE")
         await cursor.execute("TRUNCATE tests_category RESTART IDENTITY CASCADE")
+        await cursor.execute("TRUNCATE tests_author RESTART IDENTITY CASCADE")
     yield

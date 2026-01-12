@@ -56,11 +56,13 @@ __version__ = "0.5.0"
 
 from turbo_orm.exceptions import EmptyResultSet, TurboOrmError
 from turbo_orm.manager import AsyncManager
+from turbo_orm.models import AsyncModelMixin
 from turbo_orm.queryset import AsyncQuerySet
 
 __all__ = [
     "__version__",
     "AsyncManager",
+    "AsyncModelMixin",
     "AsyncQuerySet",
     "TurboOrmError",
     "EmptyResultSet",

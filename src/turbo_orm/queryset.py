@@ -44,6 +44,7 @@ class AsyncQuerySet(Generic[T]):
         self.query = query if query is not None else Query(model)
         self._db = using
         self._prefetch_related_lookups: tuple = ()
+        self._result_cache: Optional[list[T]] = None
 
     def _clone(self) -> "AsyncQuerySet[T]":
         """
@@ -58,7 +59,35 @@ class AsyncQuerySet(Generic[T]):
             using=self._db,
         )
         clone._prefetch_related_lookups = self._prefetch_related_lookups
+        # Don't copy _result_cache - new clone should fetch fresh data
         return clone
+
+    def __iter__(self):
+        """
+        Synchronous iteration over cached results.
+
+        Only works after the queryset has been evaluated (e.g., via async for).
+        Raises RuntimeError if the cache is empty.
+        """
+        if self._result_cache is None:
+            raise RuntimeError(
+                "Cannot iterate synchronously over AsyncQuerySet before it has been "
+                "evaluated. Use 'async for' or 'await qs.alist()' first."
+            )
+        return iter(self._result_cache)
+
+    def __len__(self) -> int:
+        """
+        Return the length of cached results.
+
+        Only works after the queryset has been evaluated.
+        """
+        if self._result_cache is None:
+            raise RuntimeError(
+                "Cannot get length of AsyncQuerySet before it has been evaluated. "
+                "Use 'await qs.acount()' or evaluate with 'await qs.alist()' first."
+            )
+        return len(self._result_cache)
 
     # =========================================================================
     # Chainable methods - return new AsyncQuerySet, don't hit DB
@@ -417,28 +446,305 @@ class AsyncQuerySet(Generic[T]):
         Returns:
             List of model instances
         """
+        # Return cached results if available
+        if self._result_cache is not None:
+            return list(self._result_cache)
+
         from turbo_orm.execution import execute_query
         from turbo_orm.utils import rows_to_instances
 
-        clone = self._clone()
-        rows = await execute_query(clone.query, clone._db)
-        return rows_to_instances(self.model, rows, clone.query, clone._db)
+        rows = await execute_query(self.query, self._db)
+        instances = rows_to_instances(self.model, rows, self.query, self._db)
+
+        # Execute prefetch_related
+        if self._prefetch_related_lookups:
+            await self._do_prefetch(instances)
+
+        # Cache results
+        self._result_cache = instances
+
+        return instances
 
     async def __aiter__(self):
         """
         Async iteration over queryset results.
 
-        Yields model instances one at a time using chunked fetching.
+        Fetches all results first to avoid holding connection during iteration.
+        This allows nested queries inside the loop without pool exhaustion.
+        Also populates _result_cache for subsequent sync iteration.
         """
-        from turbo_orm.execution import execute_query_chunked
+        # If already cached, yield from cache
+        if self._result_cache is not None:
+            for instance in self._result_cache:
+                yield instance
+            return
+
+        # Fetch all results first (releases connection before iteration)
+        # This prevents connection starvation when nesting queries in the loop
+        instances = await self.alist()
+
+        for instance in instances:
+            yield instance
+
+    # =========================================================================
+    # Prefetch related helpers
+    # =========================================================================
+
+    async def _do_prefetch(self, instances: list[T]) -> None:
+        """
+        Execute prefetch_related lookups for the given instances.
+
+        Args:
+            instances: List of model instances to prefetch for
+        """
+        if not self._prefetch_related_lookups or not instances:
+            return
+
+        for lookup in self._prefetch_related_lookups:
+            await self._prefetch_one_level(instances, lookup)
+
+    async def _prefetch_one_level(self, instances: list[T], lookup: Any) -> None:
+        """
+        Execute a single prefetch lookup.
+
+        Args:
+            instances: Parent instances to prefetch for
+            lookup: Lookup string or Prefetch object
+        """
+        from django.db.models import Prefetch
+
+        # Handle Prefetch object vs string lookup
+        if isinstance(lookup, Prefetch):
+            attr_name = lookup.prefetch_to.split("__")[0]
+            custom_queryset = lookup.queryset
+        elif isinstance(lookup, str):
+            attr_name = lookup.split("__")[0]
+            custom_queryset = None
+        else:
+            return
+
+        # Get the field descriptor
+        try:
+            field = self.model._meta.get_field(attr_name)
+        except Exception:
+            return
+
+        # Determine relationship type and fetch accordingly
+        if field.many_to_many:
+            await self._prefetch_many_to_many(instances, field, attr_name, custom_queryset)
+        elif field.one_to_many:
+            await self._prefetch_reverse_fk(instances, field, attr_name, custom_queryset)
+        elif field.is_relation and not field.many_to_one:
+            await self._prefetch_reverse_one_to_one(instances, field, attr_name, custom_queryset)
+        else:
+            # Forward FK or OneToOne
+            await self._prefetch_forward_relation(instances, field, attr_name, custom_queryset)
+
+    async def _prefetch_forward_relation(
+        self,
+        instances: list[T],
+        field: Any,
+        attr_name: str,
+        custom_queryset: Any,
+    ) -> None:
+        """
+        Prefetch forward ForeignKey or OneToOne relations.
+        """
+        from turbo_orm.execution import execute_query
         from turbo_orm.utils import rows_to_instances
 
-        clone = self._clone()
+        related_model = field.related_model
 
-        async for chunk in execute_query_chunked(clone.query, clone._db, chunk_size=100):
-            instances = rows_to_instances(self.model, chunk, clone.query, clone._db)
+        # Get all related PKs
+        related_pks = [
+            getattr(obj, field.attname)
+            for obj in instances
+            if getattr(obj, field.attname) is not None
+        ]
+
+        if not related_pks:
+            return
+
+        # Build query for related objects
+        if custom_queryset is not None:
+            qs = custom_queryset.filter(pk__in=related_pks)
+        else:
+            qs = AsyncQuerySet(related_model, using=self._db).filter(pk__in=related_pks)
+
+        rows = await execute_query(qs.query, qs._db)
+        related_objects = rows_to_instances(related_model, rows, qs.query, qs._db)
+
+        # Build lookup dict
+        related_dict = {obj.pk: obj for obj in related_objects}
+
+        # Assign to instances
+        for instance in instances:
+            related_pk = getattr(instance, field.attname)
+            if related_pk:
+                related_obj = related_dict.get(related_pk)
+                setattr(instance, attr_name, related_obj)
+                if not hasattr(instance._state, "fields_cache"):
+                    instance._state.fields_cache = {}
+                instance._state.fields_cache[attr_name] = related_obj
+
+    async def _prefetch_reverse_fk(
+        self,
+        instances: list[T],
+        field: Any,
+        attr_name: str,
+        custom_queryset: Any,
+    ) -> None:
+        """
+        Prefetch reverse ForeignKey relations (one-to-many).
+        """
+        from turbo_orm.execution import execute_query
+        from turbo_orm.utils import rows_to_instances
+
+        related_model = field.related_model
+        related_field_name = field.field.name  # The FK field on the related model
+
+        # Get all parent PKs
+        instance_pks = [obj.pk for obj in instances]
+
+        # Build query for related objects
+        if custom_queryset is not None:
+            qs = custom_queryset.filter(**{f"{related_field_name}__in": instance_pks})
+        else:
+            qs = AsyncQuerySet(related_model, using=self._db).filter(
+                **{f"{related_field_name}__in": instance_pks}
+            )
+
+        rows = await execute_query(qs.query, qs._db)
+        related_objects = rows_to_instances(related_model, rows, qs.query, qs._db)
+
+        # Group by parent instance
+        cache = {}
+        for related in related_objects:
+            parent_pk = getattr(related, f"{related_field_name}_id")
+            cache.setdefault(parent_pk, []).append(related)
+
+        # Assign to instances
+        for instance in instances:
+            if not hasattr(instance, "_prefetched_objects_cache"):
+                instance._prefetched_objects_cache = {}
+            instance._prefetched_objects_cache[attr_name] = cache.get(instance.pk, [])
+
+    async def _prefetch_many_to_many(
+        self,
+        instances: list[T],
+        field: Any,
+        attr_name: str,
+        custom_queryset: Any,
+    ) -> None:
+        """
+        Prefetch ManyToMany relations.
+        """
+        from turbo_orm.execution import execute_query
+        from turbo_orm.utils import rows_to_instances
+
+        related_model = field.related_model
+
+        # Get all parent PKs
+        instance_pks = [obj.pk for obj in instances]
+
+        # Get the M2M through table info
+        m2m = field.remote_field.through
+        source_field_name = field.m2m_column_name()
+        target_field_name = field.m2m_reverse_name()
+
+        # Query the through table to get mappings
+        through_query = f"""
+            SELECT {source_field_name}, {target_field_name}
+            FROM {m2m._meta.db_table}
+            WHERE {source_field_name} = ANY(%s)
+        """
+
+        from turbo_orm.execution import _get_cursor
+
+        async with _get_cursor(self._db) as cursor:
+            await cursor.execute(through_query, [instance_pks])
+            through_rows = await cursor.fetchall()
+
+        # Build mapping from parent pk to related pks
+        related_pk_map = {}
+        all_related_pks = set()
+        for source_pk, target_pk in through_rows:
+            related_pk_map.setdefault(source_pk, []).append(target_pk)
+            all_related_pks.add(target_pk)
+
+        if not all_related_pks:
+            # No related objects, set empty lists
             for instance in instances:
-                yield instance
+                if not hasattr(instance, "_prefetched_objects_cache"):
+                    instance._prefetched_objects_cache = {}
+                instance._prefetched_objects_cache[attr_name] = []
+            return
+
+        # Fetch all related objects
+        if custom_queryset is not None:
+            qs = custom_queryset.filter(pk__in=list(all_related_pks))
+        else:
+            qs = AsyncQuerySet(related_model, using=self._db).filter(
+                pk__in=list(all_related_pks)
+            )
+
+        rows = await execute_query(qs.query, qs._db)
+        related_objects = rows_to_instances(related_model, rows, qs.query, qs._db)
+
+        # Build lookup dict
+        related_dict = {obj.pk: obj for obj in related_objects}
+
+        # Assign to instances
+        for instance in instances:
+            if not hasattr(instance, "_prefetched_objects_cache"):
+                instance._prefetched_objects_cache = {}
+            related_pks = related_pk_map.get(instance.pk, [])
+            instance._prefetched_objects_cache[attr_name] = [
+                related_dict[pk] for pk in related_pks if pk in related_dict
+            ]
+
+    async def _prefetch_reverse_one_to_one(
+        self,
+        instances: list[T],
+        field: Any,
+        attr_name: str,
+        custom_queryset: Any,
+    ) -> None:
+        """
+        Prefetch reverse OneToOne relations.
+        """
+        from turbo_orm.execution import execute_query
+        from turbo_orm.utils import rows_to_instances
+
+        related_model = field.related_model
+        related_field_name = field.field.name
+
+        # Get all parent PKs
+        instance_pks = [obj.pk for obj in instances]
+
+        # Build query
+        if custom_queryset is not None:
+            qs = custom_queryset.filter(**{f"{related_field_name}__in": instance_pks})
+        else:
+            qs = AsyncQuerySet(related_model, using=self._db).filter(
+                **{f"{related_field_name}__in": instance_pks}
+            )
+
+        rows = await execute_query(qs.query, qs._db)
+        related_objects = rows_to_instances(related_model, rows, qs.query, qs._db)
+
+        # Build lookup dict by parent pk
+        related_dict = {
+            getattr(obj, f"{related_field_name}_id"): obj for obj in related_objects
+        }
+
+        # Assign to instances
+        for instance in instances:
+            related_obj = related_dict.get(instance.pk)
+            setattr(instance, attr_name, related_obj)
+            if not hasattr(instance._state, "fields_cache"):
+                instance._state.fields_cache = {}
+            instance._state.fields_cache[attr_name] = related_obj
 
     # =========================================================================
     # Write operations

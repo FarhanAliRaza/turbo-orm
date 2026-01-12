@@ -65,13 +65,13 @@ DATABASES = {
         "PASSWORD": "postgres",
         "HOST": "localhost",
         "PORT": "5432",
-        "CONN_MAX_AGE": 0,  # Required for pooling
-        "OPTIONS": {
-            "pool": {
-                "min_size": 5,
-                "max_size": 20,
-            }
-        },
+        "CONN_MAX_AGE": 30,  # Required for pooling
+        # "OPTIONS": {
+        #     "pool": {
+        #         "min_size": 5,
+        #         "max_size": 20,
+        #     }
+        # },
     }
 }
 

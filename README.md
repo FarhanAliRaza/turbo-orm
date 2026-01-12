@@ -1,6 +1,10 @@
 # django-turbo-orm
 
-Async database operations for Django using psycopg3 async cursors and connection pooling (uses django-async-backend).
+> **Experimental** - This library is under active development. API may change.
+
+Async database operations for Django using psycopg3 async cursors and connection pooling.
+
+Built on top of [django-async-backend](https://github.com/Arfey/django-async-backend) for async database connections.
 
 ## Features
 
@@ -18,7 +22,7 @@ Async database operations for Django using psycopg3 async cursors and connection
 ## Installation
 
 ```bash
-pip install turbo-orm
+pip install django-turbo-orm
 ```
 
 ## Quick Start
@@ -45,7 +49,7 @@ async def get_users(request):
     # Chainable (lazy, no DB hit)
     qs = User.objects.filter(is_active=True).order_by('-id')[:10]
 
-    # Terminal (true async DB hit)
+    # Terminal (async DB hit)
     users = await qs.alist()
 
     # Or iterate
@@ -85,6 +89,7 @@ await User.objects.acount()
 Chainable query builder with async terminal methods.
 
 **Chainable (no DB hit):**
+
 - `filter()`, `exclude()`
 - `order_by()`
 - `select_related()`, `prefetch_related()`
@@ -94,6 +99,7 @@ Chainable query builder with async terminal methods.
 - Slicing: `[:10]`
 
 **Terminal (async DB hit):**
+
 - `await qs.aget()` - Single object
 - `await qs.afirst()` - First or None
 - `await qs.alast()` - Last or None
@@ -107,18 +113,18 @@ Chainable query builder with async terminal methods.
 
 ## Why Turbo ORM?
 
-| Feature           | Django sync_to_async | Turbo ORM       |
-|-------------------|---------------------|-----------------|
-| Thread pool       | Yes (overhead)      | No              |
-| Context switching | Yes                 | No              |
-| Memory per conn   | ~800KB              | ~200KB          |
-| Concurrent perf   | Baseline            | 2-4x faster     |
+| Feature           | Django sync_to_async | Turbo ORM   |
+| ----------------- | -------------------- | ----------- |
+| Thread pool       | Yes (overhead)       | No          |
+| Context switching | Yes                  | No          |
+| Memory per conn   | ~800KB               | ~200KB      |
+| Concurrent perf   | Baseline             | 2-4x faster |
 
 ## How It Works
 
 ### Architecture
 
-turbo-orm bridges Django's SQL generation with true async database execution:
+turbo-orm bridges Django's SQL generation with async database execution:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -207,7 +213,6 @@ DATABASES = {
         "PASSWORD": "postgres",
         "HOST": "localhost",
         "PORT": "5432",
-        "CONN_MAX_AGE": 0,
         "OPTIONS": {
             "pool": {
                 "min_size": 5,   # Minimum connections in pool
@@ -217,6 +222,15 @@ DATABASES = {
     }
 }
 ```
+
+**Default Pool (auto-created if not configured):**
+
+If you don't configure a pool, turbo-orm automatically creates one with:
+
+- `min_size`: 2
+- `max_size`: 10
+
+For production, configure explicit pool sizes based on your workload.
 
 ### Dependencies
 

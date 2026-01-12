@@ -14,6 +14,43 @@ from django.db.models.sql import Query
 if TYPE_CHECKING:
     from django.db.models import Model
 
+# Default connection pools when user hasn't configured pooling
+_default_pools: dict[str, Any] = {}
+
+
+async def _get_or_create_default_pool(async_conn, using: str):
+    """Get or create a default connection pool for the given database alias."""
+    global _default_pools
+
+    if using in _default_pools:
+        pool = _default_pools[using]
+        if not pool.closed:
+            return pool
+
+    # Create a default pool with sensible defaults
+    from psycopg_pool import AsyncConnectionPool
+
+    # Get connection params and filter to only psycopg-compatible ones
+    conn_params = async_conn.get_connection_params()
+    # Only include standard libpq connection parameters
+    allowed_params = {
+        "host", "hostaddr", "port", "dbname", "user", "password",
+        "connect_timeout", "client_encoding", "options", "application_name",
+        "sslmode", "sslcert", "sslkey", "sslrootcert", "sslcrl",
+    }
+    filtered_params = {k: v for k, v in conn_params.items() if k in allowed_params and v}
+    conninfo = " ".join(f"{k}={v}" for k, v in filtered_params.items())
+
+    pool = AsyncConnectionPool(
+        conninfo=conninfo,
+        min_size=2,
+        max_size=10,
+        open=False,
+        kwargs={"autocommit": True},
+    )
+    _default_pools[using] = pool
+    return pool
+
 
 @asynccontextmanager
 async def _get_cursor(using: str = "default"):
@@ -21,19 +58,19 @@ async def _get_cursor(using: str = "default"):
     Get an async cursor with proper connection pooling.
 
     Bypasses thread-local wrapper to get direct pool connection per request.
+
+    If no pool is configured, a default pool is auto-created with:
+    - min_size=2, max_size=10
     """
     from django_async_backend.db import async_connections
 
     # Get the async connection wrapper (to access its pool)
     async_conn = async_connections[using]
 
-    # Get connection directly from pool
+    # Get connection directly from pool (or create default pool)
     pool = async_conn.pool
     if pool is None:
-        # No pooling - use regular cursor
-        async with async_conn.cursor() as cursor:
-            yield cursor
-        return
+        pool = await _get_or_create_default_pool(async_conn, using)
 
     # Open pool if not already open
     if pool.closed:

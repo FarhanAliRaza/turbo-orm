@@ -55,7 +55,7 @@ class TestAsyncQuerySetChainableMethods:
         qs = (
             AsyncQuerySet(Article)
             .filter(is_published=True)
-            .exclude(author="")
+            .exclude(author_name="")
             .order_by("-published_at")[:10]
         )
         assert isinstance(qs, AsyncQuerySet)
@@ -122,7 +122,7 @@ class TestAsyncReadOperations:
         await article_factory(title="Duplicate", author="same")
         await article_factory(title="Duplicate2", author="same")
         with pytest.raises(Article.MultipleObjectsReturned):
-            await Article.objects.aget(author="same")
+            await Article.objects.aget(author_name="same")
 
     @pytest.mark.asyncio
     async def test_afirst_returns_first_or_none(self, article_factory):
@@ -237,7 +237,7 @@ class TestAsyncWriteOperations:
         article = await Article.objects.acreate(
             title="Created Async",
             content="Created via acreate",
-            author="Test Author",
+            author_name="Test Author",
         )
         assert isinstance(article, Article)
         assert article.id is not None
@@ -271,7 +271,7 @@ class TestAsyncWriteOperations:
     async def test_aget_or_create_creates_when_not_exists(self):
         article, created = await Article.objects.aget_or_create(
             title="GetOrCreate New",
-            defaults={"content": "Default content", "author": "Default Author"},
+            defaults={"content": "Default content", "author_name": "Default Author"},
         )
         assert created is True
         assert article.title == "GetOrCreate New"

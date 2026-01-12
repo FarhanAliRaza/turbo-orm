@@ -15,10 +15,10 @@ class Article(models.Model):
     is_published = models.BooleanField(default=False)
 
     # Django's sync manager for sync views
-    # objects = Manager()
+    objects = Manager()
 
     # Async manager for turbo-orm async views
-    objects = AsyncManager()
+    aobjects = AsyncManager()
 
     def __str__(self):
         return self.title

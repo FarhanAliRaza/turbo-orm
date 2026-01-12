@@ -25,21 +25,21 @@ class TestAsyncQuerySetDjangoCompat:
         self.a1 = await Article.objects.acreate(
             title="Article 1",
             content="Content 1",
-            author="Author A",
+            author_name="Author A",
             view_count=10,
             is_published=True,
         )
         self.a2 = await Article.objects.acreate(
             title="Article 2",
             content="Content 2",
-            author="Author B",
+            author_name="Author B",
             view_count=20,
             is_published=True,
         )
         self.a3 = await Article.objects.acreate(
             title="Article 3",
             content="Content 3",
-            author="Author C",
+            author_name="Author C",
             view_count=30,
             is_published=False,
         )
