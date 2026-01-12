@@ -1,0 +1,54 @@
+# Sample project justfile
+
+# Default - show commands
+default:
+    @just --list
+
+# Start PostgreSQL with pg_textsearch
+up:
+    docker compose up -d
+    @echo "Waiting for PostgreSQL..."
+    @sleep 5
+    docker compose exec db psql -U postgres -d sample_db -c "CREATE EXTENSION IF NOT EXISTS pg_textsearch;" || true
+
+# Stop PostgreSQL
+down:
+    docker compose down
+
+# Create and run migrations
+migrate:
+    uv run python manage.py makemigrations
+    uv run python manage.py migrate
+
+# Seed sample articles
+seed:
+    uv run python manage.py seed_articles
+
+# Search articles
+search query:
+    uv run python manage.py search "{{query}}"
+
+# Search with limit
+search-limit query limit="5":
+    uv run python manage.py search "{{query}}" --limit {{limit}}
+
+# Search with threshold filter
+search-filter query threshold="-1.0":
+    uv run python manage.py search "{{query}}" --threshold {{threshold}}
+
+# Full setup: start db, migrate, seed
+setup: up migrate seed
+    @echo "Setup complete! Try: just search 'postgresql'"
+
+# Django shell
+shell:
+    uv run python manage.py shell
+
+# Show logs
+logs:
+    docker compose logs -f db
+
+# Reset everything
+reset: down
+    docker volume rm sample_project_postgres_data || true
+    just setup

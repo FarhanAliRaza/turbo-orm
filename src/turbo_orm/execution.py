@@ -5,6 +5,7 @@ Uses Django's SQLCompiler to generate SQL and django-async-backend to execute
 with true async cursors.
 """
 
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from django.db import connections
@@ -12,6 +13,24 @@ from django.db.models.sql import Query
 
 if TYPE_CHECKING:
     from django.db.models import Model
+
+
+@asynccontextmanager
+async def _get_cursor(using: str = "default"):
+    """
+    Get an async cursor and ensure connection is returned to pool after use.
+
+    django-async-backend requires calling close() after cursor usage to return
+    the connection to the pool (see django-async-backend/test_example/app.py).
+    """
+    from django_async_backend.db import async_connections
+
+    async_conn = async_connections[using]
+    try:
+        async with async_conn.cursor() as cursor:
+            yield cursor
+    finally:
+        await async_conn.close()  # Returns connection to pool
 
 
 async def execute_query(query: Query, using: str = "default") -> list[tuple]:
@@ -25,15 +44,13 @@ async def execute_query(query: Query, using: str = "default") -> list[tuple]:
     Returns:
         List of tuples (rows)
     """
-    from django_async_backend.db import async_connections
-
     # Get SQL from Django's compiler
     connection = connections[using]
     compiler = query.get_compiler(using=using, connection=connection)
     sql, params = compiler.as_sql()
 
     # Execute with async cursor
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
         rows = await cursor.fetchall()
         return list(rows)
@@ -55,13 +72,11 @@ async def execute_query_chunked(
     Yields:
         Lists of tuples (row chunks)
     """
-    from django_async_backend.db import async_connections
-
     connection = connections[using]
     compiler = query.get_compiler(using=using, connection=connection)
     sql, params = compiler.as_sql()
 
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
 
         while True:
@@ -82,8 +97,6 @@ async def execute_count(query: Query, using: str = "default") -> int:
     Returns:
         Integer count
     """
-    from django_async_backend.db import async_connections
-
     connection = connections[using]
     model = query.model
     opts = model._meta
@@ -105,7 +118,7 @@ async def execute_count(query: Query, using: str = "default") -> int:
 
     sql = f"SELECT COUNT(*) FROM {table}{where_sql}"
 
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
         row = await cursor.fetchone()
         return row[0] if row else 0
@@ -122,8 +135,6 @@ async def execute_aggregate(query: Query, using: str = "default") -> dict[str, A
     Returns:
         Dictionary of aggregate results
     """
-    from django_async_backend.db import async_connections
-
     connection = connections[using]
 
     # Clear ordering for aggregates
@@ -132,7 +143,7 @@ async def execute_aggregate(query: Query, using: str = "default") -> dict[str, A
     compiler = query.get_compiler(using=using, connection=connection)
     sql, params = compiler.as_sql()
 
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
         row = await cursor.fetchone()
 
@@ -155,8 +166,6 @@ async def execute_insert(instance: "Model", using: str = "default") -> None:
         instance: Model instance to insert
         using: Database alias
     """
-    from django_async_backend.db import async_connections
-
     model = instance.__class__
     opts = model._meta
     connection = connections[using]
@@ -190,7 +199,7 @@ async def execute_insert(instance: "Model", using: str = "default") -> None:
         params = []
 
     # Execute
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
         row = await cursor.fetchone()
 
@@ -216,8 +225,6 @@ async def execute_instance_save(
         update_fields: List of field names to update
         using: Database alias
     """
-    from django_async_backend.db import async_connections
-
     model = instance.__class__
     opts = model._meta
     connection = connections[using]
@@ -243,7 +250,7 @@ async def execute_instance_save(
 
     sql = f"UPDATE {table} SET {', '.join(set_clauses)} WHERE {pk_column} = %s"
 
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
 
 
@@ -264,7 +271,6 @@ async def execute_update(
         Number of rows updated
     """
     from django.db.models.sql import UpdateQuery
-    from django_async_backend.db import async_connections
 
     connection = connections[using]
     model = query.model
@@ -283,7 +289,7 @@ async def execute_update(
     compiler = update_query.get_compiler(using=using, connection=connection)
     sql, params = compiler.as_sql()
 
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
         return cursor.rowcount
 
@@ -303,7 +309,6 @@ async def execute_delete(
         Tuple of (total_deleted, {model_label: count})
     """
     from django.db.models.sql import DeleteQuery
-    from django_async_backend.db import async_connections
 
     connection = connections[using]
     model = query.model
@@ -317,7 +322,7 @@ async def execute_delete(
     compiler = delete_query.get_compiler(using=using, connection=connection)
     sql, params = compiler.as_sql()
 
-    async with async_connections[using].cursor() as cursor:
+    async with _get_cursor(using) as cursor:
         await cursor.execute(sql, params)
         count = cursor.rowcount
 
@@ -350,8 +355,6 @@ async def execute_bulk_insert(
     Returns:
         List of inserted instances (with PKs set)
     """
-    from django_async_backend.db import async_connections
-
     if not objs:
         return []
 
@@ -408,7 +411,7 @@ async def execute_bulk_insert(
         sql += f" RETURNING {pk_column}"
 
         # Execute
-        async with async_connections[using].cursor() as cursor:
+        async with _get_cursor(using) as cursor:
             await cursor.execute(sql, all_params)
             rows = await cursor.fetchall()
 
@@ -443,8 +446,6 @@ async def execute_bulk_update(
     Returns:
         Number of rows updated
     """
-    from django_async_backend.db import async_connections
-
     if not objs or not fields:
         return 0
 
@@ -482,7 +483,7 @@ async def execute_bulk_update(
 
             sql = f"UPDATE {table} SET {', '.join(set_clauses)} WHERE {pk_column} = %s"
 
-            async with async_connections[using].cursor() as cursor:
+            async with _get_cursor(using) as cursor:
                 await cursor.execute(sql, params)
                 total_updated += cursor.rowcount
 

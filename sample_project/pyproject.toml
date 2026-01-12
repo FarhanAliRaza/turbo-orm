@@ -1,0 +1,19 @@
+[project]
+name = "sample-project"
+version = "0.1.0"
+description = "Sample Django project demonstrating turbo-orm benchmark"
+requires-python = ">=3.12"
+
+dependencies = [
+    "django>=5.0",
+    "psycopg[binary]>=3.0",
+    "django-async-backend",
+    "turbo-orm",
+    "django-bolt>=0.5.1",
+]
+
+[tool.uv.sources]
+turbo-orm = { path = "..", editable = true }
+
+[tool.uv]
+package = false
