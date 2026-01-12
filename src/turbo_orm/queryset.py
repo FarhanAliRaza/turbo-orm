@@ -5,7 +5,7 @@ Reuses Django's Query object for SQL generation, only replaces execution
 with async cursors from django-async-backend.
 """
 
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Generic
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar
 
 from django.db.models import Q
 from django.db.models.sql import Query
@@ -663,9 +663,13 @@ class AsyncQuerySet(Generic[T]):
 
         # Add aggregations
         for arg in args:
-            clone.query.add_annotation(arg, arg.default_alias, is_summary=True)
+            clone.query.add_annotation(arg, arg.default_alias)
         for alias, expr in kwargs.items():
-            clone.query.add_annotation(expr, alias, is_summary=True)
+            clone.query.add_annotation(expr, alias)
+
+        # Set default_cols to False for aggregate queries
+        clone.query.default_cols = False
+        clone.query.set_group_by(allow_aliases=False)
 
         return await execute_aggregate(clone.query, clone._db)
 

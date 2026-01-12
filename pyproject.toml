@@ -26,7 +26,7 @@ classifiers = [
 keywords = ["django", "postgresql", "async", "orm", "asyncio", "database", "psycopg3"]
 
 dependencies = [
-    "django>=4.2,!=5.0.*,!=5.1.*",
+    "django>=4.2",
     "psycopg>=3.0",
     "django-async-backend",
 ]
@@ -75,6 +75,13 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+# Allow in-function imports (used to avoid circular imports and lazy loading)
+ignore = ["E402"]
+
+[tool.ruff.lint.per-file-ignores]
+# execution.py uses in-function imports to avoid circular dependencies
+"src/turbo_orm/execution.py" = ["E402"]
+"src/turbo_orm/queryset.py" = ["E402"]
 
 [tool.codespell]
 ignore-words-list = "BRIN"

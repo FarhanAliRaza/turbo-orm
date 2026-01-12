@@ -4,9 +4,8 @@ Comprehensive tests for turbo-orm async ORM operations.
 
 import pytest
 
-from tests.models import Article, Category
+from tests.models import Article
 from turbo_orm import AsyncManager, AsyncQuerySet
-
 
 # =============================================================================
 # Unit Tests - No Database Required
@@ -189,9 +188,7 @@ class TestAsyncReadOperations:
         await article_factory(title="Chain Test 2", is_published=False, author="Bob")
         await article_factory(title="Chain Test 3", is_published=True, author="Charlie")
         results = await (
-            Article.objects.filter(is_published=True)
-            .filter(title__startswith="Chain")
-            .alist()
+            Article.objects.filter(is_published=True).filter(title__startswith="Chain").alist()
         )
         assert len(results) == 2
 
@@ -209,7 +206,8 @@ class TestAsyncReadOperations:
         await article_factory(title="Order1", view_count=10)
         await article_factory(title="Order2", view_count=30)
         await article_factory(title="Order3", view_count=20)
-        results = await Article.objects.filter(title__startswith="Order").order_by("-view_count").alist()
+        qs = Article.objects.filter(title__startswith="Order").order_by("-view_count")
+        results = await qs.alist()
         view_counts = [r.view_count for r in results]
         assert view_counts == [30, 20, 10]
 
@@ -224,7 +222,8 @@ class TestAsyncReadOperations:
     async def test_slice_offset(self, article_factory):
         for i in range(10):
             await article_factory(title=f"Offset{i}", view_count=i)
-        results = await Article.objects.filter(title__startswith="Offset").order_by("view_count")[3:6].alist()
+        qs = Article.objects.filter(title__startswith="Offset").order_by("view_count")[3:6]
+        results = await qs.alist()
         assert len(results) == 3
         view_counts = [r.view_count for r in results]
         assert view_counts == [3, 4, 5]
@@ -317,6 +316,7 @@ class TestPublicAPI:
 
     def test_imports(self):
         from turbo_orm import AsyncManager, AsyncQuerySet, __version__
+
         assert AsyncManager is not None
         assert AsyncQuerySet is not None
         assert __version__ is not None

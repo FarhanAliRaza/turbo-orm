@@ -5,11 +5,10 @@ Uses Django's SQLCompiler to generate SQL and django-async-backend to execute
 with true async cursors.
 """
 
-from typing import TYPE_CHECKING, Any, Optional, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
 from django.db import connections
 from django.db.models.sql import Query
-from django.db.models.sql.constants import CURSOR, MULTI, NO_RESULTS, SINGLE
 
 if TYPE_CHECKING:
     from django.db.models import Model
@@ -83,7 +82,6 @@ async def execute_count(query: Query, using: str = "default") -> int:
     Returns:
         Integer count
     """
-    from django.db.models import Count
     from django_async_backend.db import async_connections
 
     connection = connections[using]
@@ -164,10 +162,7 @@ async def execute_insert(instance: "Model", using: str = "default") -> None:
     connection = connections[using]
 
     # Get fields to insert
-    fields = [
-        f for f in opts.concrete_fields
-        if not f.primary_key or not f.auto_created
-    ]
+    fields = [f for f in opts.concrete_fields if not f.primary_key or not f.auto_created]
 
     # Build column names and values
     columns = []
@@ -186,7 +181,9 @@ async def execute_insert(instance: "Model", using: str = "default") -> None:
     pk_column = connection.ops.quote_name(opts.pk.column)
 
     if columns:
-        sql = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(values)}) RETURNING {pk_column}"
+        cols = ", ".join(columns)
+        vals = ", ".join(values)
+        sql = f"INSERT INTO {table} ({cols}) VALUES ({vals}) RETURNING {pk_column}"
     else:
         # Model with no fields (just auto pk)
         sql = f"INSERT INTO {table} DEFAULT VALUES RETURNING {pk_column}"
@@ -266,8 +263,8 @@ async def execute_update(
     Returns:
         Number of rows updated
     """
-    from django_async_backend.db import async_connections
     from django.db.models.sql import UpdateQuery
+    from django_async_backend.db import async_connections
 
     connection = connections[using]
     model = query.model
@@ -305,8 +302,8 @@ async def execute_delete(
     Returns:
         Tuple of (total_deleted, {model_label: count})
     """
-    from django_async_backend.db import async_connections
     from django.db.models.sql import DeleteQuery
+    from django_async_backend.db import async_connections
 
     connection = connections[using]
     model = query.model
@@ -362,10 +359,7 @@ async def execute_bulk_insert(
     connection = connections[using]
 
     # Get fields to insert
-    fields = [
-        f for f in opts.concrete_fields
-        if not f.primary_key or not f.auto_created
-    ]
+    fields = [f for f in opts.concrete_fields if not f.primary_key or not f.auto_created]
 
     columns = [connection.ops.quote_name(f.column) for f in fields]
     table = connection.ops.quote_name(opts.db_table)
@@ -379,7 +373,7 @@ async def execute_bulk_insert(
 
     # Process in batches
     for i in range(0, len(objs), batch_size):
-        batch = objs[i:i + batch_size]
+        batch = objs[i : i + batch_size]
 
         # Build values
         all_params = []
@@ -389,9 +383,7 @@ async def execute_bulk_insert(
             row_params = []
             for field in fields:
                 value = field.pre_save(obj, add=True)
-                row_params.append(
-                    field.get_db_prep_save(value, connection=connection)
-                )
+                row_params.append(field.get_db_prep_save(value, connection=connection))
             all_params.extend(row_params)
             placeholders = ", ".join(["%s"] * len(fields))
             value_rows.append(f"({placeholders})")
@@ -405,13 +397,12 @@ async def execute_bulk_insert(
             sql += " ON CONFLICT DO NOTHING"
         elif update_conflicts and update_fields and unique_fields:
             unique_cols = [
-                connection.ops.quote_name(opts.get_field(f).column)
-                for f in unique_fields
+                connection.ops.quote_name(opts.get_field(f).column) for f in unique_fields
             ]
-            update_cols = [
-                f"{connection.ops.quote_name(opts.get_field(f).column)} = EXCLUDED.{connection.ops.quote_name(opts.get_field(f).column)}"
-                for f in update_fields
-            ]
+            update_cols = []
+            for f in update_fields:
+                col = connection.ops.quote_name(opts.get_field(f).column)
+                update_cols.append(f"{col} = EXCLUDED.{col}")
             sql += f" ON CONFLICT ({', '.join(unique_cols)}) DO UPDATE SET {', '.join(update_cols)}"
 
         sql += f" RETURNING {pk_column}"
@@ -473,7 +464,7 @@ async def execute_bulk_update(
 
     # Process in batches
     for i in range(0, len(objs), batch_size):
-        batch = objs[i:i + batch_size]
+        batch = objs[i : i + batch_size]
 
         # Update each object individually (simple approach)
         # A more optimized approach would use CASE WHEN

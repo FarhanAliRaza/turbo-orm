@@ -11,6 +11,7 @@ from django.db.models.manager import BaseManager
 
 if TYPE_CHECKING:
     from django.db.models import Model
+
     from turbo_orm.queryset import AsyncQuerySet
 
 T = TypeVar("T", bound="Model")
@@ -187,9 +188,7 @@ class AsyncManager(BaseManager.from_queryset(type("_EmptyQS", (), {}))):  # type
         batch_size: Optional[int] = None,
     ) -> int:
         """Bulk update objects."""
-        return await self.get_queryset().abulk_update(
-            objs, fields, batch_size=batch_size
-        )
+        return await self.get_queryset().abulk_update(objs, fields, batch_size=batch_size)
 
     async def aget_or_create(
         self,

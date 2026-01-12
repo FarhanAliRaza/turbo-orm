@@ -6,7 +6,6 @@ Handles conversion of database rows to model instances.
 
 from typing import TYPE_CHECKING, Any
 
-from django.db import connections
 from django.db.models.sql import Query
 
 if TYPE_CHECKING:
@@ -44,8 +43,8 @@ def rows_to_instances(
         # Create instance via from_db
         instance = model.from_db(
             using,
-            field_names[:len(row)],
-            list(row[:len(field_names)]),
+            field_names[: len(row)],
+            list(row[: len(field_names)]),
         )
         instances.append(instance)
 
