@@ -27,7 +27,7 @@ keywords = ["django", "postgresql", "async", "orm", "asyncio", "database", "psyc
 
 dependencies = [
     "django>=4.2",
-    "psycopg>=3.0",
+    "psycopg[pool]>=3.0",
     "django-async-backend",
 ]
 
