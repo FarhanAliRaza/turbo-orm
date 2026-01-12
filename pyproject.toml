@@ -1,0 +1,83 @@
+[project]
+name = "turbo-orm"
+version = "0.5.0"
+description = "Turbo ORM - True async ORM for Django with genuine async database operations"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Farhan Ali Raza", email = "farhanaliraza@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.2",
+    "Framework :: Django :: 6.0",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["django", "postgresql", "async", "orm", "asyncio", "database", "psycopg3"]
+
+dependencies = [
+    "django>=4.2,!=5.0.*,!=5.1.*",
+    "psycopg>=3.0",
+    "django-async-backend",
+]
+
+[dependency-groups]
+dev = [
+    "prek>=0.2.22",
+    "pytest>=7.0",
+    "pytest-django>=4.5",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.14.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/FarhanAliRaza/turbo-orm"
+Documentation = "https://github.com/FarhanAliRaza/turbo-orm#readme"
+Repository = "https://github.com/FarhanAliRaza/turbo-orm"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/turbo_orm"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = [
+    ".",
+    "src",
+]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "django_db: mark test as needing database access",
+    "asyncio: mark test as async",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.codespell]
+ignore-words-list = "BRIN"
+
+[tool.django]
+settings_module = "tests.settings"
