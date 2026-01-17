@@ -158,47 +158,6 @@ turbo-orm bridges Django's SQL generation with async database execution:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Connection Pooling
-
-turbo-orm uses `django-async-backend` with `psycopg_pool` for connection management.
-
-**The Problem with django-async-backend's Default Behavior:**
-
-`django-async-backend` uses thread-local storage for connections. In async code, all concurrent requests share the same thread, meaning they all fight over one connection wrapper:
-
-```python
-# All 100 concurrent requests get the SAME wrapper
-async_conn = async_connections["default"]  # Thread-local, shared!
-```
-
-**Our Solution:**
-
-We bypass the thread-local wrapper and access the pool directly:
-
-```python
-pool = async_connections["default"].pool
-
-# Each request gets its OWN connection
-conn = await pool.getconn()
-try:
-    cursor = conn.cursor()
-    await cursor.execute(sql, params)
-    rows = await cursor.fetchall()
-finally:
-    # Return THIS connection to pool (doesn't affect other requests)
-    await pool.putconn(conn)
-```
-
-**Flow with 100 concurrent requests:**
-
-```
-Request 1 ──→ pool.getconn() ──→ Connection A ──→ query ──→ pool.putconn(A)
-Request 2 ──→ pool.getconn() ──→ Connection B ──→ query ──→ pool.putconn(B)
-Request 3 ──→ pool.getconn() ──→ Connection C ──→ query ──→ pool.putconn(C)
-...
-```
-
-Each request has isolated connection lifecycle. No conflicts, no pool exhaustion.
 
 ### Configuration
 

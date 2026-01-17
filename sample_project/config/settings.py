@@ -67,12 +67,12 @@ DATABASES = {
         "PASSWORD": "postgres",
         "HOST": "localhost",
         "PORT": "5432",
-        # "OPTIONS": {
-        #     "pool": {
-        #         "min_size": 5,
-        #         "max_size": 20,
-        #     }
-        # },
+        "OPTIONS": {
+            "pool": {
+                "min_size": 8,
+                "max_size": 20,
+            }
+        },
     }
 }
 

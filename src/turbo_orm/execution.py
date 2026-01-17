@@ -12,77 +12,28 @@ Connection handling:
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
-import psycopg
 from django.db import connections
 from django.db.models.sql import Query
 
 if TYPE_CHECKING:
     from django.db.models import Model
 
-# Standard libpq connection parameters
-_ALLOWED_CONN_PARAMS = {
-    "host",
-    "hostaddr",
-    "port",
-    "dbname",
-    "user",
-    "password",
-    "connect_timeout",
-    "client_encoding",
-    "options",
-    "application_name",
-    "sslmode",
-    "sslcert",
-    "sslkey",
-    "sslrootcert",
-    "sslcrl",
-}
-
-
-def _get_connection_params(async_conn) -> dict:
-    """Extract psycopg-compatible connection parameters."""
-    conn_params = async_conn.get_connection_params()
-    return {k: v for k, v in conn_params.items() if k in _ALLOWED_CONN_PARAMS and v}
-
 
 @asynccontextmanager
 async def _get_cursor(using: str = "default"):
     """
-    Get an async cursor with proper connection handling.
+    Get an async cursor using django-async-backend's connection handling.
 
-    With pooling (OPTIONS["pool"] configured):
-        - Borrows connection from pool
-        - Returns connection to pool when done
-
-    Without pooling:
-        - Creates new connection per query
-        - Closes connection when done
+    Closes connection after use to return it to the pool.
     """
     from django_async_backend.db import async_connections
 
     async_conn = async_connections[using]
-    pool = async_conn.pool
-
-    if pool is not None:
-        # Pooled mode: borrow from pool, return when done
-        if pool.closed:
-            await pool.open()
-
-        conn = await pool.getconn()
-        try:
-            cursor = conn.cursor()
+    try:
+        async with async_conn._cursor() as cursor:
             yield cursor
-        finally:
-            await pool.putconn(conn)
-    else:
-        # Direct mode: create connection, close when done
-        params = _get_connection_params(async_conn)
-        conn = await psycopg.AsyncConnection.connect(**params, autocommit=True)
-        try:
-            cursor = conn.cursor()
-            yield cursor
-        finally:
-            await conn.close()
+    finally:
+        await async_conn.close()
 
 
 async def execute_query(query: Query, using: str = "default") -> list[tuple]:
