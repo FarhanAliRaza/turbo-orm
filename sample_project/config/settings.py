@@ -57,6 +57,8 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # Database - using async backend for true async operations
+# Pooling configured via Django's standard OPTIONS["pool"] (Django 5.1+)
+# See: https://docs.djangoproject.com/en/6.0/ref/databases/#connection-pool
 DATABASES = {
     "default": {
         "ENGINE": "django_async_backend.db.backends.postgresql",
@@ -65,7 +67,6 @@ DATABASES = {
         "PASSWORD": "postgres",
         "HOST": "localhost",
         "PORT": "5432",
-        "CONN_MAX_AGE": 30,  # Required for pooling
         # "OPTIONS": {
         #     "pool": {
         #         "min_size": 5,

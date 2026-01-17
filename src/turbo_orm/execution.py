@@ -3,99 +3,86 @@ SQL Execution Layer - Bridge between Django's SQL compiler and async cursors.
 
 Uses Django's SQLCompiler to generate SQL and django-async-backend to execute
 with true async cursors.
+
+Connection handling:
+- With pooling (OPTIONS["pool"]): borrows from pool, returns when done
+- Without pooling: creates connection per query, closes when done
 """
 
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Optional
 
+import psycopg
 from django.db import connections
 from django.db.models.sql import Query
 
 if TYPE_CHECKING:
     from django.db.models import Model
 
-# Default connection pools when user hasn't configured pooling
-_default_pools: dict[str, Any] = {}
+# Standard libpq connection parameters
+_ALLOWED_CONN_PARAMS = {
+    "host",
+    "hostaddr",
+    "port",
+    "dbname",
+    "user",
+    "password",
+    "connect_timeout",
+    "client_encoding",
+    "options",
+    "application_name",
+    "sslmode",
+    "sslcert",
+    "sslkey",
+    "sslrootcert",
+    "sslcrl",
+}
 
 
-async def _get_or_create_default_pool(async_conn, using: str):
-    """Get or create a default connection pool for the given database alias."""
-    global _default_pools
-
-    if using in _default_pools:
-        pool = _default_pools[using]
-        if not pool.closed:
-            return pool
-
-    # Create a default pool with sensible defaults
-    from psycopg_pool import AsyncConnectionPool
-
-    # Get connection params and filter to only psycopg-compatible ones
+def _get_connection_params(async_conn) -> dict:
+    """Extract psycopg-compatible connection parameters."""
     conn_params = async_conn.get_connection_params()
-    # Only include standard libpq connection parameters
-    allowed_params = {
-        "host",
-        "hostaddr",
-        "port",
-        "dbname",
-        "user",
-        "password",
-        "connect_timeout",
-        "client_encoding",
-        "options",
-        "application_name",
-        "sslmode",
-        "sslcert",
-        "sslkey",
-        "sslrootcert",
-        "sslcrl",
-    }
-    filtered_params = {k: v for k, v in conn_params.items() if k in allowed_params and v}
-    conninfo = " ".join(f"{k}={v}" for k, v in filtered_params.items())
-
-    pool = AsyncConnectionPool(
-        conninfo=conninfo,
-        min_size=2,
-        max_size=10,
-        open=False,
-        kwargs={"autocommit": True},
-    )
-    _default_pools[using] = pool
-    return pool
+    return {k: v for k, v in conn_params.items() if k in _ALLOWED_CONN_PARAMS and v}
 
 
 @asynccontextmanager
 async def _get_cursor(using: str = "default"):
     """
-    Get an async cursor with proper connection pooling.
+    Get an async cursor with proper connection handling.
 
-    Bypasses thread-local wrapper to get direct pool connection per request.
+    With pooling (OPTIONS["pool"] configured):
+        - Borrows connection from pool
+        - Returns connection to pool when done
 
-    If no pool is configured, a default pool is auto-created with:
-    - min_size=2, max_size=10
+    Without pooling:
+        - Creates new connection per query
+        - Closes connection when done
     """
     from django_async_backend.db import async_connections
 
-    # Get the async connection wrapper (to access its pool)
     async_conn = async_connections[using]
-
-    # Get connection directly from pool (or create default pool)
     pool = async_conn.pool
-    if pool is None:
-        pool = await _get_or_create_default_pool(async_conn, using)
 
-    # Open pool if not already open
-    if pool.closed:
-        await pool.open()
+    if pool is not None:
+        # Pooled mode: borrow from pool, return when done
+        if pool.closed:
+            await pool.open()
 
-    # Get connection from pool directly
-    conn = await pool.getconn()
-    try:
-        cursor = conn.cursor()
-        yield cursor
-    finally:
-        # Return connection to pool
-        await pool.putconn(conn)
+        conn = await pool.getconn()
+        try:
+            cursor = conn.cursor()
+            yield cursor
+        finally:
+            await pool.putconn(conn)
+    else:
+        # Direct mode: create connection, close when done
+        params = _get_connection_params(async_conn)
+        conn = await psycopg.AsyncConnection.connect(**params, autocommit=True)
+        try:
+            cursor = conn.cursor()
+            yield cursor
+        finally:
+            await conn.close()
 
 
 async def execute_query(query: Query, using: str = "default") -> list[tuple]:
